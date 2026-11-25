@@ -24,6 +24,8 @@ import {
 } from "./types/timer";
 import { useIntervalNotifications } from "#/hooks/use-interval-notifications";
 import { NotificationBanner } from "#/components/NotificationBanner";
+import { useIntervalChime } from "#/hooks/use-interval-chime";
+import { ChimeToggle } from "#/components/ChimeToggle";
 
 export function App() {
   const [isDbReady, setIsDbReady] = useState(false);
@@ -120,6 +122,8 @@ export function App() {
     notifyIntervalComplete,
   } = useIntervalNotifications();
 
+  const { chimeEnabled, toggleChime, playChime } = useIntervalChime();
+
   const { isRunning, remainingMs, togglePlayPause, reset, setDurationSeconds } = useDriftFreeTimer({
     initialSeconds: currentBlockMeta.durationSeconds,
     onComplete: () => handleTimerComplete(),
@@ -151,6 +155,7 @@ export function App() {
         nextBlock: completedBlock,
         willAutoAdvance: false,
       });
+      playChime("pomodoro");
       return;
     }
 
@@ -201,6 +206,7 @@ export function App() {
         nextBlock,
         willAutoAdvance: Boolean(nextBlock && autoAdvanceRoutine),
       });
+      playChime("routine");
     }
   }, [
     appMode,
@@ -214,6 +220,7 @@ export function App() {
     currentBlockMeta.durationSeconds,
     setDurationSeconds,
     notifyIntervalComplete,
+    playChime,
   ]);
 
   const handleRoutineSaved = useCallback(
@@ -336,12 +343,18 @@ export function App() {
           onSelectMode={selectAppMode}
         />
 
-        <NotificationBanner
-          permission={notificationPermission}
-          enabled={notificationsEnabled}
-          onRequestPermission={requestNotificationPermission}
-          onToggleEnabled={toggleNotificationsEnabled}
-        />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <NotificationBanner
+            permission={notificationPermission}
+            enabled={notificationsEnabled}
+            onRequestPermission={requestNotificationPermission}
+            onToggleEnabled={toggleNotificationsEnabled}
+          />
+          <ChimeToggle
+            enabled={chimeEnabled}
+            onToggle={toggleChime}
+          />
+        </div>
 
         <section className="rounded-2xl bg-zinc-900 border border-zinc-800 p-6 sm:p-8 space-y-6">
           {appMode === "pomodoro" ? (

@@ -240,7 +240,7 @@ export function RoutineCreatorForm({ routineToEdit, onSaved, onCancel }: Routine
 
               <input
                 type="number"
-                min={0.1}
+                min={0.0}
                 step={0.5}
                 value={step.durationMinutes}
                 onChange={(e) =>
