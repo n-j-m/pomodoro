@@ -14,6 +14,19 @@ const TWENTY_EIGHT_TWO_STEPS: RoutineStep[] = [
   { label: "Move", category: "move", durationSeconds: 2 * 60 },
 ];
 
+async function seedDefaultRoutineIfEmpty(): Promise<void> {
+  const [{ value: routineCount }] = await db.select({ value: count() }).from(sessionRoutines);
+
+  if (routineCount === 0) {
+    await db.insert(sessionRoutines).values({
+      name: "20-8-2 Sit / Stand / Move",
+      steps: TWENTY_EIGHT_TWO_STEPS,
+      repeatIndefinitely: true,
+      autoAdvance: false,
+    });
+  }
+}
+
 let initPromise: Promise<void> | null = null;
 
 export function initDb(): Promise<void> {
@@ -35,4 +48,16 @@ export function initDb(): Promise<void> {
   }
 
   return initPromise;
+}
+
+export async function resetDbToInitialSeed(): Promise<void> {
+  await runBrowserMigrations(client);
+
+  await client.transaction(async (tx) => {
+    await tx.exec(`
+      TRUNCATE TABLE sessions, session_routines RESTART IDENTITY CASCADE;
+    `);
+  });
+
+  await seedDefaultRoutineIfEmpty();
 }

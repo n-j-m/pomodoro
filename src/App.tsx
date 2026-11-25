@@ -1,12 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { eq } from "drizzle-orm";
-import { ModeSwitcher } from "./components/ModeSwitcher";
-import { PomodoroControls } from "./components/PomodoroControls";
-import { RoutineControls } from "./components/RoutineControls";
-import { RoutineCreatorForm } from "./components/RoutineCreatorForm";
-import { SessionHistoryList } from "./components/SessionHistoryList";
-import { TimerDisplay } from "./components/TimerDisplay";
-import { db, initDb } from "#/data/client";
+import { ChimeToggle } from "#/components/ChimeToggle";
+import { ClearDataButton } from "#/components/ClearDataButton";
+import { NotificationBanner } from "#/components/NotificationBanner";
+import { db, initDb, resetDbToInitialSeed } from "#/data/client";
 import {
   sessionRoutines,
   sessions,
@@ -14,6 +9,16 @@ import {
   type SessionRoutine,
 } from "#/data/schema";
 import { useDriftFreeTimer } from "#/hooks/use-drift-free-timer";
+import { useIntervalChime } from "#/hooks/use-interval-chime";
+import { useIntervalNotifications } from "#/hooks/use-interval-notifications";
+import { eq } from "drizzle-orm";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ModeSwitcher } from "./components/ModeSwitcher";
+import { PomodoroControls } from "./components/PomodoroControls";
+import { RoutineControls } from "./components/RoutineControls";
+import { RoutineCreatorForm } from "./components/RoutineCreatorForm";
+import { SessionHistoryList } from "./components/SessionHistoryList";
+import { TimerDisplay } from "./components/TimerDisplay";
 import {
   POMODORO_PHASES,
   type ActiveBlockMeta,
@@ -22,10 +27,6 @@ import {
   type RoutineWithSessions,
   type SessionWithRoutine,
 } from "./types/timer";
-import { useIntervalNotifications } from "#/hooks/use-interval-notifications";
-import { NotificationBanner } from "#/components/NotificationBanner";
-import { useIntervalChime } from "#/hooks/use-interval-chime";
-import { ChimeToggle } from "#/components/ChimeToggle";
 
 export function App() {
   const [isDbReady, setIsDbReady] = useState(false);
@@ -291,6 +292,26 @@ export function App() {
     setIsFormOpen(false);
   };
 
+  const handleClearData = useCallback(async () => {
+    await resetDbToInitialSeed();
+    await refreshData();
+
+    const seededRoutines = await db.query.sessionRoutines.findMany({
+      orderBy: { id: "asc" },
+    });
+
+    const firstRoutine = seededRoutines[0];
+    setSelectedRoutineId(firstRoutine?.id ?? null);
+    setStepIndex(0);
+    setAutoAdvanceRoutine(firstRoutine?.autoAdvance ?? false);
+    closeForm();
+
+    if (appMode === "routine" && firstRoutine?.steps[0]) {
+      setDurationSeconds(firstRoutine.steps[0].durationSeconds, false);
+    } else {
+      setDurationSeconds(POMODORO_PHASES[pomodoroPhase].durationSeconds, false);
+    }
+  }, [appMode, pomodoroPhase, refreshData, setDurationSeconds]);
   const selectAppMode = (nextMode: AppMode) => {
     setAppMode(nextMode);
     if (nextMode === "pomodoro") {
@@ -410,6 +431,10 @@ export function App() {
         </section>
 
         <SessionHistoryList sessions={recentSessions} />
+        <footer className="flex items-center justify-between pt-2 border-t border-zinc-900 text-xs text-zinc-500">
+          <span>Stored locally in PGlite (IndexedDB)</span>
+          <ClearDataButton onClearData={handleClearData} />
+        </footer>
       </div>
     </div>
   );
