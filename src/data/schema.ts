@@ -12,7 +12,7 @@ export const sessionRoutines = pgTable("session_routines", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   steps: jsonb("steps").$type<RoutineStep[]>().notNull(),
-  repeatIndefinitley: boolean("repeat_indefinitley").notNull().default(true),
+  repeatIndefinitely: boolean("repeat_indefinitely").notNull().default(true),
   autoAdvance: boolean("auto_advance").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

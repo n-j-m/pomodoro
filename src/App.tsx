@@ -1,22 +1,29 @@
-import { ModeSwitcher } from "#/components/ModeSwitcher";
-import { PomodoroControls } from "#/components/PomodoroControls";
-import { RoutineControls } from "#/components/RoutineControls";
-import { SessionHistoryList } from "#/components/SessionHistoryList";
-import { TimerDisplay } from "#/components/TimerDisplay";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { eq } from "drizzle-orm";
+import { ModeSwitcher } from "./components/ModeSwitcher";
+import { PomodoroControls } from "./components/PomodoroControls";
+import { RoutineControls } from "./components/RoutineControls";
+import { RoutineCreatorForm } from "./components/RoutineCreatorForm";
+import { SessionHistoryList } from "./components/SessionHistoryList";
+import { TimerDisplay } from "./components/TimerDisplay";
 import { db, initDb } from "#/data/client";
-import { sessions, type SessionCategory, type SessionRoutine } from "#/data/schema";
+import {
+  sessionRoutines,
+  sessions,
+  type SessionCategory,
+  type SessionRoutine,
+} from "#/data/schema";
 import { useDriftFreeTimer } from "#/hooks/use-drift-free-timer";
 import {
-  type AppMode,
   POMODORO_PHASES,
+  type ActiveBlockMeta,
+  type AppMode,
   type PomodoroPhase,
   type RoutineWithSessions,
   type SessionWithRoutine,
-  type ActiveBlockMeta,
-} from "#/types/timer";
-import { useCallback, useEffect, useMemo, useState } from "react";
+} from "./types/timer";
 
-function App() {
+export function App() {
   const [isDbReady, setIsDbReady] = useState(false);
   const [appMode, setAppMode] = useState<AppMode>("pomodoro");
 
@@ -27,6 +34,8 @@ function App() {
   const [selectedRoutineId, setSelectedRoutineId] = useState<number | null>(null);
   const [stepIndex, setStepIndex] = useState(0);
   const [autoAdvanceRoutine, setAutoAdvanceRoutine] = useState(true);
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingRoutine, setEditingRoutine] = useState<SessionRoutine | null>(null);
 
   const [recentSessions, setRecentSessions] = useState<SessionWithRoutine[]>([]);
 
@@ -60,7 +69,7 @@ function App() {
 
     return {
       title: "Sit",
-      category: "site" as SessionCategory,
+      category: "sit" as SessionCategory,
       durationSeconds: 20 * 60,
     };
   }, [appMode, pomodoroPhase, activeRoutineStep]);
@@ -86,7 +95,12 @@ function App() {
 
     setRoutines(routineRows);
     setRecentSessions(sessionRows);
-    setSelectedRoutineId((prev) => prev ?? routineRows[0]?.id ?? null);
+    setSelectedRoutineId((prev) => {
+      if (prev !== null && routineRows.some((r) => r.id === prev)) {
+        return prev;
+      }
+      return routineRows[0]?.id ?? null;
+    });
   }, []);
 
   useEffect(() => {
@@ -113,6 +127,7 @@ function App() {
       });
       await refreshData();
       setDurationSeconds(cfg.durationSeconds, false);
+      return;
     }
 
     if (activeRoutine && activeRoutineStep) {
@@ -127,7 +142,7 @@ function App() {
       const hasSteps = activeRoutine.steps.length > 0;
       const nextIdx = hasSteps ? (stepIndex + 1) % activeRoutine.steps.length : 0;
       const wrappedCycle = hasSteps && nextIdx === 0;
-      const shouldContinue = hasSteps && (!wrappedCycle || activeRoutine.repeatIndefinitley);
+      const shouldContinue = hasSteps && (!wrappedCycle || activeRoutine.repeatIndefinitely);
 
       setStepIndex(nextIdx);
       await refreshData();
@@ -152,14 +167,78 @@ function App() {
     setDurationSeconds,
   ]);
 
-  // NOTE(nick): handleTimerComplete references setDurationSeconds; wire a ref so the
-  //       callback never reads stale timer actions.
-  const handleCompleteRef = useCallback(() => handleTimerComplete(), [handleTimerComplete]);
-  void handleCompleteRef;
+  const handleRoutineSaved = useCallback(
+    async (savedRoutineId: number) => {
+      await refreshData();
+
+      const saved = await db.query.sessionRoutines.findFirst({
+        where: { id: savedRoutineId },
+      });
+
+      setSelectedRoutineId(savedRoutineId);
+      setStepIndex(0);
+      setEditingRoutine(null);
+      setIsFormOpen(false);
+      setAutoAdvanceRoutine(saved?.autoAdvance ?? true);
+
+      const firstStep = saved?.steps[0];
+      if (firstStep) {
+        setDurationSeconds(firstStep.durationSeconds, false);
+      }
+    },
+    [refreshData, setDurationSeconds],
+  );
+
+  const handleDeleteRoutine = useCallback(
+    async (routineId: number) => {
+      await db.delete(sessionRoutines).where(eq(sessionRoutines.id, routineId));
+
+      if (editingRoutine?.id === routineId) {
+        setEditingRoutine(null);
+        setIsFormOpen(false);
+      }
+
+      const remaining = await db.query.sessionRoutines.findMany({
+        orderBy: { id: "asc" },
+      });
+
+      const nextSelected =
+        selectedRoutineId === routineId ? (remaining[0]?.id ?? null) : selectedRoutineId;
+
+      setSelectedRoutineId(nextSelected);
+      setStepIndex(0);
+      await refreshData();
+
+      const nextRoutine = remaining.find((r) => r.id === nextSelected);
+      const nextStep = nextRoutine?.steps[0];
+      if (nextStep) {
+        setDurationSeconds(nextStep.durationSeconds, false);
+      } else {
+        setDurationSeconds(20 * 60, false);
+      }
+    },
+    [editingRoutine, selectedRoutineId, refreshData, setDurationSeconds],
+  );
+
+  const openCreateForm = () => {
+    setEditingRoutine(null);
+    setIsFormOpen(true);
+  };
+
+  const openEditForm = (routine: SessionRoutine) => {
+    setEditingRoutine(routine);
+    setIsFormOpen(true);
+  };
+
+  const closeForm = () => {
+    setEditingRoutine(null);
+    setIsFormOpen(false);
+  };
 
   const selectAppMode = (nextMode: AppMode) => {
     setAppMode(nextMode);
     if (nextMode === "pomodoro") {
+      closeForm();
       setDurationSeconds(POMODORO_PHASES[pomodoroPhase].durationSeconds, false);
     } else if (activeRoutineStep) {
       setDurationSeconds(activeRoutineStep.durationSeconds, false);
@@ -174,6 +253,8 @@ function App() {
   const selectRoutine = (routine: SessionRoutine) => {
     setSelectedRoutineId(routine.id);
     setStepIndex(0);
+    setAutoAdvanceRoutine(routine.autoAdvance);
+    closeForm();
     const firstStep = routine.steps[0];
     if (firstStep) {
       setDurationSeconds(firstStep.durationSeconds, false);
@@ -193,7 +274,7 @@ function App() {
   if (!isDbReady) {
     return (
       <div className="min-h-screen bg-zinc-950 text-zinc-400 flex items-center justify-center text-sm">
-        Loading data ...
+        Loading PGlite &amp; running Drizzle migrations...
       </div>
     );
   }
@@ -215,14 +296,37 @@ function App() {
               onTaskNameChange={setTaskName}
             />
           ) : (
-            <RoutineControls
-              routines={routines}
-              activeRoutine={activeRoutine}
-              stepIndex={stepIndex}
-              autoAdvance={autoAdvanceRoutine}
-              onSelectRouting={selectRoutine}
-              onToggleAutoAdvance={setAutoAdvanceRoutine}
-            />
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-zinc-400">Repeating Routine</span>
+                <button
+                  type="button"
+                  onClick={() => (isFormOpen ? closeForm() : openCreateForm())}
+                  className="rounded-lg bg-zinc-800 hover:bg-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-200 transition"
+                >
+                  {isFormOpen ? "Close Form" : "+ New Routine"}
+                </button>
+              </div>
+
+              {isFormOpen ? (
+                <RoutineCreatorForm
+                  routineToEdit={editingRoutine}
+                  onSaved={handleRoutineSaved}
+                  onCancel={closeForm}
+                />
+              ) : (
+                <RoutineControls
+                  routines={routines}
+                  activeRoutine={activeRoutine}
+                  stepIndex={stepIndex}
+                  autoAdvance={autoAdvanceRoutine}
+                  onSelectRoutine={selectRoutine}
+                  onEditRoutine={openEditForm}
+                  onDeleteRoutine={handleDeleteRoutine}
+                  onToggleAutoAdvance={setAutoAdvanceRoutine}
+                />
+              )}
+            </div>
           )}
 
           <TimerDisplay

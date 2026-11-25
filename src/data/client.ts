@@ -27,7 +27,7 @@ export function initDb(): Promise<void> {
         await db.insert(sessionRoutines).values({
           name: "20-8-2 Sit / Stand / Move",
           steps: TWENTY_EIGHT_TWO_STEPS,
-          repeatIndefinitley: true,
+          repeatIndefinitely: true,
           autoAdvance: false,
         });
       }

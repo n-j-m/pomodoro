@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "db:gen": "drizzle-kit generate --name init"
+    "db:gen": "drizzle-kit generate"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.6.0",

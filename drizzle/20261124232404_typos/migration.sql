@@ -1,0 +1,1 @@
+ALTER TABLE "session_routines" RENAME COLUMN "repeat_indefinitley" TO "repeat_indefinitely";

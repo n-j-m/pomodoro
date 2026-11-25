@@ -1,0 +1,39 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "ddf32a77-0e86-4568-9dad-7ff14afebd18",
+  "prevIds": [
+    "50ec2892-780c-4258-a666-96483967d28b"
+  ],
+  "footprints": [
+    {
+      "statementType": "rename_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "session_routines",
+        "repeat_indefinitley"
+      ],
+      "writes": [
+        "s|col|public.session_routines.repeat_indefinitley",
+        "n|col|public.session_routines.repeat_indefinitley",
+        "s|col|public.session_routines.repeat_indefinitely",
+        "n|col|public.session_routines.repeat_indefinitely"
+      ],
+      "reads": [
+        "n|tbl|public.session_routines",
+        "n|sch|public"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "rename",
+      "key": "columns\u0000[\"public\",\"session_routines\",\"repeat_indefinitley\"]",
+      "set": {
+        "name": "repeat_indefinitely"
+      }
+    }
+  ]
+}
