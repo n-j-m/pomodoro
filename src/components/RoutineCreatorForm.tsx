@@ -1,6 +1,3 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { eq } from "drizzle-orm";
-import { Plus, Trash2 } from "lucide-react";
 import { db } from "#/data/client";
 import {
   sessionRoutines,
@@ -8,6 +5,9 @@ import {
   type SessionCategory,
   type SessionRoutine,
 } from "#/data/schema";
+import { eq } from "drizzle-orm";
+import { Plus, Trash2 } from "lucide-react";
+import { useState, type SubmitEvent } from "react";
 
 interface DraftStep {
   id: string;
@@ -61,28 +61,16 @@ const DEFAULT_STEPS: () => DraftStep[] = () => [
 export function RoutineCreatorForm({ routineToEdit, onSaved, onCancel }: RoutineCreatorFormProps) {
   const isEditing = Boolean(routineToEdit);
 
-  const [name, setName] = useState("");
-  const [repeatIndefinitely, setRepeatIndefinitely] = useState(true);
-  const [autoAdvance, setAutoAdvance] = useState(true);
-  const [steps, setSteps] = useState<DraftStep[]>(DEFAULT_STEPS);
+  const [name, setName] = useState(() => routineToEdit?.name ?? "");
+  const [repeatIndefinitely, setRepeatIndefinitely] = useState(
+    () => routineToEdit?.repeatIndefinitely ?? true,
+  );
+  const [autoAdvance, setAutoAdvance] = useState(() => routineToEdit?.autoAdvance ?? true);
+  const [steps, setSteps] = useState<DraftStep[]>(() =>
+    routineToEdit ? routineToDraftSteps(routineToEdit) : DEFAULT_STEPS(),
+  );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  useEffect(() => {
-    if (routineToEdit) {
-      setName(routineToEdit.name);
-      setRepeatIndefinitely(routineToEdit.repeatIndefinitely);
-      setAutoAdvance(routineToEdit.autoAdvance);
-      setSteps(routineToDraftSteps(routineToEdit));
-      setErrorMessage(null);
-    } else {
-      setName("");
-      setRepeatIndefinitely(true);
-      setAutoAdvance(true);
-      setSteps(DEFAULT_STEPS());
-      setErrorMessage(null);
-    }
-  }, [routineToEdit]);
 
   const updateStep = (id: string, patch: Partial<Omit<DraftStep, "id">>) => {
     setSteps((prev) => prev.map((step) => (step.id === id ? { ...step, ...patch } : step)));
@@ -96,7 +84,7 @@ export function RoutineCreatorForm({ routineToEdit, onSaved, onCancel }: Routine
     setSteps((prev) => (prev.length > 1 ? prev.filter((s) => s.id !== id) : prev));
   };
 
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
     setErrorMessage(null);
 
