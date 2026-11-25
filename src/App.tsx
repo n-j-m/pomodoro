@@ -22,6 +22,8 @@ import {
   type RoutineWithSessions,
   type SessionWithRoutine,
 } from "./types/timer";
+import { useIntervalNotifications } from "#/hooks/use-interval-notifications";
+import { NotificationBanner } from "#/components/NotificationBanner";
 
 export function App() {
   const [isDbReady, setIsDbReady] = useState(false);
@@ -110,6 +112,14 @@ export function App() {
     });
   }, [refreshData]);
 
+  const {
+    permission: notificationPermission,
+    enabled: notificationsEnabled,
+    requestPermission: requestNotificationPermission,
+    toggleEnabled: toggleNotificationsEnabled,
+    notifyIntervalComplete,
+  } = useIntervalNotifications();
+
   const { isRunning, remainingMs, togglePlayPause, reset, setDurationSeconds } = useDriftFreeTimer({
     initialSeconds: currentBlockMeta.durationSeconds,
     onComplete: () => handleTimerComplete(),
@@ -118,6 +128,12 @@ export function App() {
   const handleTimerComplete = useCallback(async () => {
     if (appMode === "pomodoro") {
       const cfg = POMODORO_PHASES[pomodoroPhase];
+      const completedBlock: ActiveBlockMeta = {
+        title: cfg.label,
+        category: cfg.category,
+        durationSeconds: cfg.durationSeconds,
+      };
+
       await db.insert(sessions).values({
         task: taskName.trim() || "Untitled Task",
         routineId: null,
@@ -127,10 +143,24 @@ export function App() {
       });
       await refreshData();
       setDurationSeconds(cfg.durationSeconds, false);
+
+      notifyIntervalComplete({
+        appMode: "pomodoro",
+        completedBlock,
+        taskName,
+        nextBlock: completedBlock,
+        willAutoAdvance: false,
+      });
       return;
     }
 
     if (activeRoutine && activeRoutineStep) {
+      const completedBlock: ActiveBlockMeta = {
+        title: activeRoutineStep.label,
+        category: activeRoutineStep.category,
+        durationSeconds: activeRoutineStep.durationSeconds,
+      };
+
       await db.insert(sessions).values({
         task: null,
         routineId: activeRoutine.id,
@@ -148,11 +178,29 @@ export function App() {
       await refreshData();
 
       const nextStep = hasSteps ? activeRoutine.steps[nextIdx] : undefined;
-      if (nextStep && shouldContinue) {
-        setDurationSeconds(nextStep.durationSeconds, autoAdvanceRoutine);
+      const nextBlock: ActiveBlockMeta | undefined =
+        nextStep && shouldContinue
+          ? {
+              title: nextStep.label,
+              category: nextStep.category,
+              durationSeconds: nextStep.durationSeconds,
+            }
+          : undefined;
+
+      if (nextBlock) {
+        setDurationSeconds(nextBlock.durationSeconds, autoAdvanceRoutine);
       } else {
         setDurationSeconds(currentBlockMeta.durationSeconds, false);
       }
+
+      notifyIntervalComplete({
+        appMode: "routine",
+        completedBlock,
+        taskName,
+        routineName: activeRoutine.name,
+        nextBlock,
+        willAutoAdvance: Boolean(nextBlock && autoAdvanceRoutine),
+      });
     }
   }, [
     appMode,
@@ -165,6 +213,7 @@ export function App() {
     autoAdvanceRoutine,
     currentBlockMeta.durationSeconds,
     setDurationSeconds,
+    notifyIntervalComplete,
   ]);
 
   const handleRoutineSaved = useCallback(
@@ -285,6 +334,13 @@ export function App() {
         <ModeSwitcher
           appMode={appMode}
           onSelectMode={selectAppMode}
+        />
+
+        <NotificationBanner
+          permission={notificationPermission}
+          enabled={notificationsEnabled}
+          onRequestPermission={requestNotificationPermission}
+          onToggleEnabled={toggleNotificationsEnabled}
         />
 
         <section className="rounded-2xl bg-zinc-900 border border-zinc-800 p-6 sm:p-8 space-y-6">
