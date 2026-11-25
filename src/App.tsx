@@ -1,6 +1,7 @@
 import { ChimeToggle } from "#/components/ChimeToggle";
 import { ClearDataButton } from "#/components/ClearDataButton";
 import { NotificationBanner } from "#/components/NotificationBanner";
+import { SessionStatsSummary } from "#/components/SessionStatsSummary";
 import { db, initDb, resetDbToInitialSeed } from "#/data/client";
 import {
   sessionRoutines,
@@ -43,6 +44,8 @@ export function App() {
   const [editingRoutine, setEditingRoutine] = useState<SessionRoutine | null>(null);
 
   const [recentSessions, setRecentSessions] = useState<SessionWithRoutine[]>([]);
+
+  const [dataRevision, setDataRevision] = useState(0);
 
   const activeRoutine = useMemo(
     () => routines.find((r) => r.id === selectedRoutineId) ?? routines[0],
@@ -106,6 +109,7 @@ export function App() {
       }
       return routineRows[0]?.id ?? null;
     });
+    setDataRevision((x) => x + 1);
   }, []);
 
   useEffect(() => {
@@ -429,6 +433,8 @@ export function App() {
             onSkipStep={appMode === "routine" ? advanceRoutineStepManually : undefined}
           />
         </section>
+
+        <SessionStatsSummary refreshKey={dataRevision} />
 
         <SessionHistoryList sessions={recentSessions} />
         <footer className="flex items-center justify-between pt-2 border-t border-zinc-900 text-xs text-zinc-500">
