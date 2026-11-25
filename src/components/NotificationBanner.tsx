@@ -1,20 +1,15 @@
+import { useAlertPreferences } from "#/hooks/use-alert-preferences";
 import { Bell, BellOff, ShieldAlert } from "lucide-react";
-import type { NotificationPermissionState } from "#/hooks/use-interval-notifications";
 
-interface NotificationBannerProps {
-  permission: NotificationPermissionState;
-  enabled: boolean;
-  onRequestPermission: () => void | Promise<unknown>;
-  onToggleEnabled: () => void | Promise<unknown>;
-}
+export function NotificationBanner() {
+  const {
+    notificationPermission,
+    notificationsEnabled,
+    requestNotificationPermission,
+    toggleNotificationsEnabled,
+  } = useAlertPreferences();
 
-export function NotificationBanner({
-  permission,
-  enabled,
-  onRequestPermission,
-  onToggleEnabled,
-}: NotificationBannerProps) {
-  if (permission === "unsupported") {
+  if (notificationPermission === "unsupported") {
     return (
       <div className="flex items-center justify-between gap-3 rounded-xl bg-zinc-900/70 border border-zinc-800 px-4 py-2.5 text-xs text-zinc-400">
         <span className="inline-flex items-center gap-2">
@@ -25,7 +20,7 @@ export function NotificationBanner({
     );
   }
 
-  if (permission === "denied") {
+  if (notificationPermission === "denied") {
     return (
       <div className="flex items-center justify-between gap-3 rounded-xl bg-amber-950/30 border border-amber-800/50 px-4 py-2.5 text-xs text-amber-200/90">
         <span className="inline-flex items-center gap-2">
@@ -37,7 +32,7 @@ export function NotificationBanner({
     );
   }
 
-  if (permission === "default") {
+  if (notificationPermission === "default") {
     return (
       <div className="flex items-center justify-between gap-3 rounded-xl bg-zinc-900 border border-zinc-800 px-4 py-2.5 text-xs">
         <span className="inline-flex items-center gap-2 text-zinc-300">
@@ -46,7 +41,7 @@ export function NotificationBanner({
         </span>
         <button
           type="button"
-          onClick={() => void onRequestPermission()}
+          onClick={() => void requestNotificationPermission()}
           className="rounded-lg bg-zinc-800 hover:bg-zinc-700 px-3 py-1.5 font-medium text-white transition shrink-0"
         >
           Enable Alerts
@@ -58,19 +53,19 @@ export function NotificationBanner({
   return (
     <div className="flex items-center justify-between gap-3 rounded-xl bg-zinc-900/70 border border-zinc-800 px-4 py-2.5 text-xs">
       <span className="inline-flex items-center gap-2 text-zinc-300">
-        {enabled ? (
+        {notificationsEnabled ? (
           <Bell className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
         ) : (
           <BellOff className="h-3.5 w-3.5 text-zinc-500 shrink-0" />
         )}
-        Desktop notifications: {enabled ? "On" : "Muted"}
+        Desktop notifications: {notificationsEnabled ? "On" : "Muted"}
       </span>
       <button
         type="button"
-        onClick={() => void onToggleEnabled()}
+        onClick={() => void toggleNotificationsEnabled()}
         className="rounded-lg bg-zinc-800 hover:bg-zinc-700 px-3 py-1.5 font-medium text-zinc-200 transition shrink-0"
       >
-        {enabled ? "Mute" : "Unmute"}
+        {notificationsEnabled ? "Mute" : "Unmute"}
       </button>
     </div>
   );

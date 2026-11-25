@@ -1,46 +1,36 @@
 import { PomodoroControls } from "#/components/PomodoroControls";
 import { TimerDisplay } from "#/components/TimerDisplay";
-import type { ActiveBlockMeta, PomodoroPhase } from "#/types/timer";
+import { useTimerClock } from "#/hooks/use-timer-clock";
 
-interface PomodoroViewProps {
-  phase: PomodoroPhase;
-  taskName: string;
-  blockMeta: ActiveBlockMeta;
-  remainingMs: number;
-  isRunning: boolean;
-  onSelectPhase: (phase: PomodoroPhase) => void;
-  onTaskNameChange: (name: string) => void;
-  onTogglePlayPause: () => void;
-  onReset: () => void;
-}
+export function PomodoroView() {
+  const {
+    pomodoroPhase,
+    taskName,
+    currentBlockMeta,
+    remainingMs,
+    isRunning,
+    selectPomodoroPhase,
+    setTaskName,
+    togglePlayPause,
+    reset,
+  } = useTimerClock();
 
-export function PomodoroView({
-  phase,
-  taskName,
-  blockMeta,
-  remainingMs,
-  isRunning,
-  onSelectPhase,
-  onTaskNameChange,
-  onTogglePlayPause,
-  onReset,
-}: PomodoroViewProps) {
   return (
     <div className="space-y-6">
       <PomodoroControls
-        phase={phase}
+        phase={pomodoroPhase}
         taskName={taskName}
-        onSelectPhase={onSelectPhase}
-        onTaskNameChange={onTaskNameChange}
+        onSelectPhase={selectPomodoroPhase}
+        onTaskNameChange={setTaskName}
       />
 
       <TimerDisplay
         appMode="pomodoro"
-        blockMeta={blockMeta}
+        blockMeta={currentBlockMeta}
         remainingMs={remainingMs}
         isRunning={isRunning}
-        onTogglePlayPause={onTogglePlayPause}
-        onReset={onReset}
+        onTogglePlayPause={togglePlayPause}
+        onReset={reset}
       />
     </div>
   );

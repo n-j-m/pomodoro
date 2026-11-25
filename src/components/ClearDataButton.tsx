@@ -1,18 +1,19 @@
 import { useState } from "react";
 import { RotateCcw, Trash2 } from "lucide-react";
+import { useSessionsAndRoutines } from "#/hooks/use-sessions-and-routines";
+import { useTimerClock } from "#/hooks/use-timer-clock";
 
-interface ClearDataButtonProps {
-  onClearData: () => Promise<void> | void;
-}
-
-export function ClearDataButton({ onClearData }: ClearDataButtonProps) {
+export function ClearDataButton() {
+  const { clearAllData } = useSessionsAndRoutines();
+  const { syncAfterClearData } = useTimerClock();
   const [confirming, setConfirming] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
 
   const handleConfirm = async () => {
     setIsClearing(true);
     try {
-      await onClearData();
+      const sessionRoutine = await clearAllData();
+      syncAfterClearData(sessionRoutine);
       setConfirming(false);
     } finally {
       setIsClearing(false);
