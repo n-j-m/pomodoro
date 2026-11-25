@@ -12,14 +12,13 @@ import {
 import { useDriftFreeTimer } from "#/hooks/use-drift-free-timer";
 import { useIntervalChime } from "#/hooks/use-interval-chime";
 import { useIntervalNotifications } from "#/hooks/use-interval-notifications";
+import { PomodoroView } from "#/views/PomodoroView";
+import { RoutineView } from "#/views/RoutineView";
 import { eq } from "drizzle-orm";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Redirect, Route, Router, Switch, useLocation } from "wouter";
 import { ModeSwitcher } from "./components/ModeSwitcher";
-import { PomodoroControls } from "./components/PomodoroControls";
-import { RoutineControls } from "./components/RoutineControls";
-import { RoutineCreatorForm } from "./components/RoutineCreatorForm";
 import { SessionHistoryList } from "./components/SessionHistoryList";
-import { TimerDisplay } from "./components/TimerDisplay";
 import {
   POMODORO_PHASES,
   type ActiveBlockMeta,
@@ -29,9 +28,12 @@ import {
   type SessionWithRoutine,
 } from "./types/timer";
 
-export function App() {
+function TimerWorkspace() {
+  const [location] = useLocation();
+  const appMode = location === "/routine" ? "routine" : "pomodoro";
+
   const [isDbReady, setIsDbReady] = useState(false);
-  const [appMode, setAppMode] = useState<AppMode>("pomodoro");
+  const [dataRevision, setDataRevision] = useState(0);
 
   const [pomodoroPhase, setPomodoroPhase] = useState<PomodoroPhase>("focus");
   const [taskName, setTaskName] = useState("Deep work block");
@@ -45,7 +47,15 @@ export function App() {
 
   const [recentSessions, setRecentSessions] = useState<SessionWithRoutine[]>([]);
 
-  const [dataRevision, setDataRevision] = useState(0);
+  const {
+    permission: notificationPermission,
+    enabled: notificationsEnabled,
+    requestPermission: requestNotificationPermission,
+    toggleEnabled: toggleNotificationsEnabled,
+    notifyIntervalComplete,
+  } = useIntervalNotifications();
+
+  const { chimeEnabled, toggleChime, playChime } = useIntervalChime();
 
   const activeRoutine = useMemo(
     () => routines.find((r) => r.id === selectedRoutineId) ?? routines[0],
@@ -119,20 +129,7 @@ export function App() {
     });
   }, [refreshData]);
 
-  const {
-    permission: notificationPermission,
-    enabled: notificationsEnabled,
-    requestPermission: requestNotificationPermission,
-    toggleEnabled: toggleNotificationsEnabled,
-    notifyIntervalComplete,
-  } = useIntervalNotifications();
-
-  const { chimeEnabled, toggleChime, playChime } = useIntervalChime();
-
-  const { isRunning, remainingMs, togglePlayPause, reset, setDurationSeconds } = useDriftFreeTimer({
-    initialSeconds: currentBlockMeta.durationSeconds,
-    onComplete: () => handleTimerComplete(),
-  });
+  const setDurationRef = useRef<(seconds: number, startImmediately: boolean) => void>(() => {});
 
   const handleTimerComplete = useCallback(async () => {
     if (appMode === "pomodoro") {
@@ -151,8 +148,9 @@ export function App() {
         durationSeconds: cfg.durationSeconds,
       });
       await refreshData();
-      setDurationSeconds(cfg.durationSeconds, false);
+      setDurationRef.current(cfg.durationSeconds, false);
 
+      void playChime("pomodoro");
       notifyIntervalComplete({
         appMode: "pomodoro",
         completedBlock,
@@ -160,7 +158,6 @@ export function App() {
         nextBlock: completedBlock,
         willAutoAdvance: false,
       });
-      playChime("pomodoro");
       return;
     }
 
@@ -198,11 +195,12 @@ export function App() {
           : undefined;
 
       if (nextBlock) {
-        setDurationSeconds(nextBlock.durationSeconds, autoAdvanceRoutine);
+        setDurationRef.current(nextBlock.durationSeconds, autoAdvanceRoutine);
       } else {
-        setDurationSeconds(currentBlockMeta.durationSeconds, false);
+        setDurationRef.current(currentBlockMeta.durationSeconds, false);
       }
 
+      void playChime("routine");
       notifyIntervalComplete({
         appMode: "routine",
         completedBlock,
@@ -211,7 +209,6 @@ export function App() {
         nextBlock,
         willAutoAdvance: Boolean(nextBlock && autoAdvanceRoutine),
       });
-      playChime("routine");
     }
   }, [
     appMode,
@@ -223,10 +220,39 @@ export function App() {
     stepIndex,
     autoAdvanceRoutine,
     currentBlockMeta.durationSeconds,
-    setDurationSeconds,
     notifyIntervalComplete,
     playChime,
   ]);
+
+  const { isRunning, remainingMs, togglePlayPause, reset, setDurationSeconds } = useDriftFreeTimer({
+    initialSeconds: currentBlockMeta.durationSeconds,
+    onComplete: () => handleTimerComplete(),
+  });
+
+  useEffect(() => {
+    setDurationRef.current = setDurationSeconds;
+  }, [setDurationSeconds]);
+
+  const prevModeRef = useRef<AppMode>(appMode);
+
+  useEffect(() => {
+    function updateUI() {
+      if (prevModeRef.current === appMode) return;
+      prevModeRef.current = appMode;
+
+      if (appMode === "pomodoro") {
+        setEditingRoutine(null);
+        setIsFormOpen(false);
+        setDurationSeconds(POMODORO_PHASES[pomodoroPhase].durationSeconds, false);
+      } else if (activeRoutineStep) {
+        setDurationSeconds(activeRoutineStep.durationSeconds, false);
+      } else {
+        setDurationSeconds(20 * 60, false);
+      }
+    }
+
+    updateUI();
+  }, [appMode, pomodoroPhase, activeRoutineStep, setDurationSeconds]);
 
   const handleRoutineSaved = useCallback(
     async (savedRoutineId: number) => {
@@ -281,6 +307,27 @@ export function App() {
     [editingRoutine, selectedRoutineId, refreshData, setDurationSeconds],
   );
 
+  const handleClearData = useCallback(async () => {
+    await resetDbToInitialSeed();
+    await refreshData();
+
+    const seededRoutines = await db.query.sessionRoutines.findMany({
+      orderBy: { id: "asc" },
+    });
+
+    const firstRoutine = seededRoutines[0];
+    setSelectedRoutineId(firstRoutine?.id ?? null);
+    setStepIndex(0);
+    setAutoAdvanceRoutine(firstRoutine?.autoAdvance ?? false);
+    setIsFormOpen(false);
+
+    if (appMode === "routine" && firstRoutine?.steps[0]) {
+      setDurationSeconds(firstRoutine.steps[0].durationSeconds, false);
+    } else {
+      setDurationSeconds(POMODORO_PHASES[pomodoroPhase].durationSeconds, false);
+    }
+  }, [appMode, pomodoroPhase, refreshData, setDurationSeconds]);
+
   const openCreateForm = () => {
     setEditingRoutine(null);
     setIsFormOpen(true);
@@ -294,36 +341,6 @@ export function App() {
   const closeForm = () => {
     setEditingRoutine(null);
     setIsFormOpen(false);
-  };
-
-  const handleClearData = useCallback(async () => {
-    await resetDbToInitialSeed();
-    await refreshData();
-
-    const seededRoutines = await db.query.sessionRoutines.findMany({
-      orderBy: { id: "asc" },
-    });
-
-    const firstRoutine = seededRoutines[0];
-    setSelectedRoutineId(firstRoutine?.id ?? null);
-    setStepIndex(0);
-    setAutoAdvanceRoutine(firstRoutine?.autoAdvance ?? false);
-    closeForm();
-
-    if (appMode === "routine" && firstRoutine?.steps[0]) {
-      setDurationSeconds(firstRoutine.steps[0].durationSeconds, false);
-    } else {
-      setDurationSeconds(POMODORO_PHASES[pomodoroPhase].durationSeconds, false);
-    }
-  }, [appMode, pomodoroPhase, refreshData, setDurationSeconds]);
-  const selectAppMode = (nextMode: AppMode) => {
-    setAppMode(nextMode);
-    if (nextMode === "pomodoro") {
-      closeForm();
-      setDurationSeconds(POMODORO_PHASES[pomodoroPhase].durationSeconds, false);
-    } else if (activeRoutineStep) {
-      setDurationSeconds(activeRoutineStep.durationSeconds, false);
-    }
   };
 
   const selectPomodoroPhase = (nextPhase: PomodoroPhase) => {
@@ -363,10 +380,7 @@ export function App() {
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 py-10 px-4">
       <div className="mx-auto max-w-xl space-y-6">
-        <ModeSwitcher
-          appMode={appMode}
-          onSelectMode={selectAppMode}
-        />
+        <ModeSwitcher />
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           <NotificationBanner
@@ -382,67 +396,74 @@ export function App() {
         </div>
 
         <section className="rounded-2xl bg-zinc-900 border border-zinc-800 p-6 sm:p-8 space-y-6">
-          {appMode === "pomodoro" ? (
-            <PomodoroControls
-              phase={pomodoroPhase}
-              taskName={taskName}
-              onSelectPhase={selectPomodoroPhase}
-              onTaskNameChange={setTaskName}
-            />
-          ) : (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-zinc-400">Repeating Routine</span>
-                <button
-                  type="button"
-                  onClick={() => (isFormOpen ? closeForm() : openCreateForm())}
-                  className="rounded-lg bg-zinc-800 hover:bg-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-200 transition"
-                >
-                  {isFormOpen ? "Close Form" : "+ New Routine"}
-                </button>
-              </div>
+          <Switch>
+            <Route path="/tasks">
+              <PomodoroView
+                phase={pomodoroPhase}
+                taskName={taskName}
+                blockMeta={currentBlockMeta}
+                remainingMs={remainingMs}
+                isRunning={isRunning}
+                onSelectPhase={selectPomodoroPhase}
+                onTaskNameChange={setTaskName}
+                onTogglePlayPause={togglePlayPause}
+                onReset={reset}
+              />
+            </Route>
 
-              {isFormOpen ? (
-                <RoutineCreatorForm
-                  routineToEdit={editingRoutine}
-                  onSaved={handleRoutineSaved}
-                  onCancel={closeForm}
-                />
-              ) : (
-                <RoutineControls
-                  routines={routines}
-                  activeRoutine={activeRoutine}
-                  stepIndex={stepIndex}
-                  autoAdvance={autoAdvanceRoutine}
-                  onSelectRoutine={selectRoutine}
-                  onEditRoutine={openEditForm}
-                  onDeleteRoutine={handleDeleteRoutine}
-                  onToggleAutoAdvance={setAutoAdvanceRoutine}
-                />
-              )}
-            </div>
-          )}
+            <Route path="/routine">
+              <RoutineView
+                routines={routines}
+                activeRoutine={activeRoutine}
+                stepIndex={stepIndex}
+                autoAdvance={autoAdvanceRoutine}
+                isFormOpen={isFormOpen}
+                editingRoutine={editingRoutine}
+                blockMeta={currentBlockMeta}
+                remainingMs={remainingMs}
+                isRunning={isRunning}
+                onOpenCreateForm={openCreateForm}
+                onOpenEditForm={openEditForm}
+                onCloseForm={closeForm}
+                onRoutineSaved={handleRoutineSaved}
+                onSelectRoutine={selectRoutine}
+                onDeleteRoutine={handleDeleteRoutine}
+                onToggleAutoAdvance={setAutoAdvanceRoutine}
+                onTogglePlayPause={togglePlayPause}
+                onReset={reset}
+                onSkipStep={advanceRoutineStepManually}
+              />
+            </Route>
 
-          <TimerDisplay
-            appMode={appMode}
-            blockMeta={currentBlockMeta}
-            remainingMs={remainingMs}
-            isRunning={isRunning}
-            onTogglePlayPause={togglePlayPause}
-            onReset={reset}
-            onSkipStep={appMode === "routine" ? advanceRoutineStepManually : undefined}
-          />
+            <Route>
+              <Redirect
+                to="/tasks"
+                replace
+              />
+            </Route>
+          </Switch>
         </section>
 
         <SessionStatsSummary refreshKey={dataRevision} />
 
         <SessionHistoryList sessions={recentSessions} />
+
         <footer className="flex items-center justify-between pt-2 border-t border-zinc-900 text-xs text-zinc-500">
           <span>Stored locally in PGlite (IndexedDB)</span>
           <ClearDataButton onClearData={handleClearData} />
         </footer>
       </div>
     </div>
+  );
+}
+
+const ROUTER_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+export function App() {
+  return (
+    <Router base={ROUTER_BASE}>
+      <TimerWorkspace />
+    </Router>
   );
 }
 

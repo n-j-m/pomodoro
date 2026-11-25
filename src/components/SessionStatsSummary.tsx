@@ -70,23 +70,23 @@ export function SessionStatsSummary({ refreshKey }: SessionStatsSummaryProps) {
 
       {/* Focus & Break Highlights */}
       <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-xl bg-zinc-950 border border-zinc-800/90 p-3.5">
+        <div className="flex flex-col justify-between rounded-xl bg-zinc-950 border border-zinc-800/90 p-3.5">
           <div className="flex items-center gap-1.5 text-xs text-zinc-400">
             <Flame className="h-3.5 w-3.5 text-rose-400" />
             Total Focus
           </div>
-          <div className="mt-1 font-mono text-2xl font-bold text-white tabular-nums">
+          <div className="mt-auto pt-2 font-mono text-2xl font-bold text-white tabular-nums">
             {focusMinutes}
             <span className="ml-1 text-xs font-sans font-normal text-zinc-400">min</span>
           </div>
         </div>
 
-        <div className="rounded-xl bg-zinc-950 border border-zinc-800/90 p-3.5">
+        <div className="flex flex-col justify-between rounded-xl bg-zinc-950 border border-zinc-800/90 p-3.5">
           <div className="flex items-center gap-1.5 text-xs text-zinc-400">
             <Activity className="h-3.5 w-3.5 text-emerald-400" />
             Active Posture (Stand + Move)
           </div>
-          <div className="mt-1 font-mono text-2xl font-bold text-white tabular-nums">
+          <div className="mt-auto pt-2 font-mono text-2xl font-bold text-white tabular-nums">
             {standMinutes + moveMinutes}
             <span className="ml-1 text-xs font-sans font-normal text-zinc-400">min</span>
           </div>
