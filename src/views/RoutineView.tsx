@@ -1,52 +1,39 @@
 import { RoutineControls } from "#/components/RoutineControls";
 import { RoutineCreatorForm } from "#/components/RoutineCreatorForm";
 import { TimerDisplay } from "#/components/TimerDisplay";
-import type { SessionRoutine } from "#/data/schema";
-import type { ActiveBlockMeta, RoutineWithSessions } from "#/types/timer";
+import { useSessionsAndRoutines } from "#/hooks/use-sessions-and-routines";
+import { useTimerClock } from "#/hooks/use-timer-clock";
 
-interface RoutineViewProps {
-  routines: RoutineWithSessions[];
-  activeRoutine: RoutineWithSessions | undefined;
-  stepIndex: number;
-  autoAdvance: boolean;
-  isFormOpen: boolean;
-  editingRoutine: SessionRoutine | null;
-  blockMeta: ActiveBlockMeta;
-  remainingMs: number;
-  isRunning: boolean;
-  onOpenCreateForm: () => void;
-  onOpenEditForm: (routine: SessionRoutine) => void;
-  onCloseForm: () => void;
-  onRoutineSaved: (routineId: number) => void | Promise<void>;
-  onSelectRoutine: (routine: SessionRoutine) => void;
-  onDeleteRoutine: (routineId: number) => void | Promise<void>;
-  onToggleAutoAdvance: (checked: boolean) => void;
-  onTogglePlayPause: () => void;
-  onReset: () => void;
-  onSkipStep: () => void;
-}
+export function RoutineView() {
+  const {
+    routines,
+    activeRoutine,
+    stepIndex,
+    autoAdvanceRoutine,
+    isFormOpen,
+    editingRoutine,
+    openCreateForm,
+    openEditForm,
+    closeForm,
+    selectRoutine,
+    saveRoutine,
+    deleteRoutine,
+    setAutoAdvanceRoutine,
+    advanceRoutineStepManually,
+  } = useSessionsAndRoutines();
 
-export function RoutineView({
-  routines,
-  activeRoutine,
-  stepIndex,
-  autoAdvance,
-  isFormOpen,
-  editingRoutine,
-  blockMeta,
-  remainingMs,
-  isRunning,
-  onOpenCreateForm,
-  onOpenEditForm,
-  onCloseForm,
-  onRoutineSaved,
-  onSelectRoutine,
-  onDeleteRoutine,
-  onToggleAutoAdvance,
-  onTogglePlayPause,
-  onReset,
-  onSkipStep,
-}: RoutineViewProps) {
+  const {
+    currentBlockMeta,
+    remainingMs,
+    isRunning,
+    togglePlayPause,
+    reset,
+    syncRoutineSelection,
+    syncAfterRoutineSave,
+    syncAfterRoutineDelete,
+    syncStepSkip,
+  } = useTimerClock();
+
   return (
     <div className="space-y-6">
       <div className="space-y-4">
@@ -54,7 +41,7 @@ export function RoutineView({
           <span className="text-xs font-medium text-zinc-400">Repeating Routine</span>
           <button
             type="button"
-            onClick={() => (isFormOpen ? onCloseForm() : onOpenCreateForm())}
+            onClick={() => (isFormOpen ? closeForm() : openCreateForm())}
             className="rounded-lg bg-zinc-800 hover:bg-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-200 transition"
           >
             {isFormOpen ? "Close Form" : "+ New Routine"}
@@ -65,31 +52,43 @@ export function RoutineView({
           <RoutineCreatorForm
             key={editingRoutine?.id ?? "new-routine"}
             routineToEdit={editingRoutine}
-            onSaved={onRoutineSaved}
-            onCancel={onCloseForm}
+            onSaved={async (input) => {
+              const saved = await saveRoutine(input);
+              syncAfterRoutineSave(saved);
+            }}
+            onCancel={closeForm}
           />
         ) : (
           <RoutineControls
             routines={routines}
             activeRoutine={activeRoutine}
             stepIndex={stepIndex}
-            autoAdvance={autoAdvance}
-            onSelectRoutine={onSelectRoutine}
-            onEditRoutine={onOpenEditForm}
-            onDeleteRoutine={onDeleteRoutine}
-            onToggleAutoAdvance={onToggleAutoAdvance}
+            autoAdvance={autoAdvanceRoutine}
+            onSelectRoutine={(routine) => {
+              selectRoutine(routine);
+              syncRoutineSelection(routine);
+            }}
+            onEditRoutine={openEditForm}
+            onDeleteRoutine={async (routineId) => {
+              const nextRoutine = await deleteRoutine(routineId);
+              syncAfterRoutineDelete(nextRoutine);
+            }}
+            onToggleAutoAdvance={setAutoAdvanceRoutine}
           />
         )}
       </div>
 
       <TimerDisplay
         appMode="routine"
-        blockMeta={blockMeta}
+        blockMeta={currentBlockMeta}
         remainingMs={remainingMs}
         isRunning={isRunning}
-        onTogglePlayPause={onTogglePlayPause}
-        onReset={onReset}
-        onSkipStep={onSkipStep}
+        onTogglePlayPause={togglePlayPause}
+        onReset={reset}
+        onSkipStep={() => {
+          advanceRoutineStepManually();
+          syncStepSkip();
+        }}
       />
     </div>
   );

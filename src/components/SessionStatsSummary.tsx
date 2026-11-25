@@ -1,10 +1,7 @@
-import { useEffect, useState } from "react";
-import { Activity, Flame } from "lucide-react";
 import { fetchSessionStats, type CategoryStatsSummary, type StatsRange } from "#/data/stats";
-
-interface SessionStatsSummaryProps {
-  refreshKey: number;
-}
+import { useSessionsAndRoutines } from "#/hooks/use-sessions-and-routines";
+import { Activity, Flame } from "lucide-react";
+import { useEffect, useState } from "react";
 
 const EMPTY_STATS: CategoryStatsSummary = {
   focusMinutes: 0,
@@ -16,7 +13,8 @@ const EMPTY_STATS: CategoryStatsSummary = {
   totalTrackedMinutes: 0,
 };
 
-export function SessionStatsSummary({ refreshKey }: SessionStatsSummaryProps) {
+export function SessionStatsSummary() {
+  const { dataRevision } = useSessionsAndRoutines();
   const [range, setRange] = useState<StatsRange>("today");
   const [stats, setStats] = useState<CategoryStatsSummary>(EMPTY_STATS);
 
@@ -31,7 +29,7 @@ export function SessionStatsSummary({ refreshKey }: SessionStatsSummaryProps) {
     return () => {
       cancelled = true;
     };
-  }, [range, refreshKey]);
+  }, [range, dataRevision]);
 
   const { focusMinutes, breakMinutes, sitMinutes, standMinutes, moveMinutes, totalPostureMinutes } =
     stats;

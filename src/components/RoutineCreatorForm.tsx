@@ -5,6 +5,7 @@ import {
   type SessionCategory,
   type SessionRoutine,
 } from "#/data/schema";
+import type { SaveRoutineInput } from "#/hooks/use-sessions-and-routines";
 import { eq } from "drizzle-orm";
 import { Plus, Trash2 } from "lucide-react";
 import { useState, type SubmitEvent } from "react";
@@ -18,7 +19,7 @@ interface DraftStep {
 
 interface RoutineCreatorFormProps {
   routineToEdit?: SessionRoutine | null;
-  onSaved?: (routineId: number) => void | Promise<void>;
+  onSaved?: (routine: SaveRoutineInput) => void | Promise<void>;
   onCancel?: () => void;
 }
 
@@ -113,10 +114,10 @@ export function RoutineCreatorForm({ routineToEdit, onSaved, onCancel }: Routine
 
     setIsSubmitting(true);
     try {
-      let savedId: number | undefined;
+      let saved: SaveRoutineInput | undefined;
 
       if (routineToEdit) {
-        await db
+        const [updated] = await db
           .update(sessionRoutines)
           .set({
             name: trimmedName,
@@ -124,8 +125,15 @@ export function RoutineCreatorForm({ routineToEdit, onSaved, onCancel }: Routine
             repeatIndefinitely,
             autoAdvance,
           })
-          .where(eq(sessionRoutines.id, routineToEdit.id));
-        savedId = routineToEdit.id;
+          .where(eq(sessionRoutines.id, routineToEdit.id))
+          .returning();
+        saved = {
+          id: updated.id,
+          name: updated.name,
+          autoAdvance: updated.autoAdvance,
+          repeatIndefinitiely: updated.repeatIndefinitely,
+          steps: updated.steps,
+        };
       } else {
         const [inserted] = await db
           .insert(sessionRoutines)
@@ -135,12 +143,18 @@ export function RoutineCreatorForm({ routineToEdit, onSaved, onCancel }: Routine
             repeatIndefinitely,
             autoAdvance,
           })
-          .returning({ id: sessionRoutines.id });
-        savedId = inserted?.id;
+          .returning();
+        saved = {
+          id: inserted.id,
+          name: inserted.name,
+          autoAdvance: inserted.autoAdvance,
+          repeatIndefinitiely: inserted.repeatIndefinitely,
+          steps: inserted.steps,
+        };
       }
 
-      if (savedId !== undefined && onSaved) {
-        await onSaved(savedId);
+      if (saved !== undefined && onSaved) {
+        await onSaved(saved);
       }
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : "Failed to save routine to PGlite.");

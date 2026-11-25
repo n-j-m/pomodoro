@@ -1,24 +1,23 @@
-import { formatCategoryBadge, type SessionWithRoutine } from "#/types/timer";
+import { useSessionsAndRoutines } from "#/hooks/use-sessions-and-routines";
+import { formatCategoryBadge } from "#/types/timer";
 import { CheckCircle2 } from "lucide-react";
 
-interface SessionHistoryListProps {
-  sessions: SessionWithRoutine[];
-}
+export function SessionHistoryList() {
+  const { recentSessions } = useSessionsAndRoutines();
 
-export function SessionHistoryList({ sessions }: SessionHistoryListProps) {
   return (
     <section className="space-y-3">
       <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
         Recent Completed Intervals
       </h2>
 
-      {sessions.length === 0 ? (
+      {recentSessions.length === 0 ? (
         <div className="rounded-xl bg-zinc-900/50 border border-zinc-800/80 p-4 text-sm text-zinc-500">
           No completed sessions yet. Finish an interval to record it.
         </div>
       ) : (
         <ul className="space-y-2">
-          {sessions.map((entry) => (
+          {recentSessions.map((entry) => (
             <li
               key={entry.id}
               className="flex items-center justify-between gap-4 rounded-xl bg-zinc-900/70 border border-zinc-800/80 px-4 py-3 text-sm"
